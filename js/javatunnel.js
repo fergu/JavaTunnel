@@ -7,13 +7,11 @@
 /***************************************************************/
 // Get our canvas to draw to. Note (0,0) is top left, with x increasing to the right and y increasing downwards
 var canv = document.getElementById("windTunnelCanvas");
-canv.width  = window.innerWidth;
-canv.height = window.innerHeight;
 var ctx = canv.getContext("2d");
 
 var msPerFrame = 1000.0/60.0;
-const particleLife = 5000; // Maximum lifespan of a smoke particle in miliseconds. Larger number means longer smoke lifespan, which means more particles may need to be drawn, requiring more power
-const Uinf = 0.5; // Freestream velocity
+const particleLife = 20000; // Maximum lifespan of a smoke particle in miliseconds. Larger number means longer smoke lifespan, which means more particles may need to be drawn, requiring more power
+var Uinf = 0.5; // Freestream velocity
 //const a = 100; // Cylinder radius
 
 var isMouseClicked = false; // Just a variable keeping track of if the mouse is up or down
@@ -25,13 +23,20 @@ var minSmokeTime = 1; // Minimum time between creation of smoke particles in mil
 var particles = [];
 
 var mux = -0.1;
-var muy = -0.4;
+var muy = 0.0;
+
+function inputControlChanged() {
+	Uinf = document.getElementById("Uinf").value;
+	mux = -1*document.getElementById("centerX").value;
+	muy = -1*document.getElementById("centerY").value;
+}
 
 // This function resizes the canvas when the window resizes so that it always fills the window
 function windowResized() {
 	canv.width  = window.innerWidth;
-	canv.height = window.innerHeight;
+	canv.height = 0.9*window.innerHeight; // Leave 10% of the window height for the controls
 };
+windowResized(); // Call the window resized routine once to set the size
 
 window.setInterval(drawTunnel,msPerFrame); // Causes the drawTunnel function to be called every msPerFrame miliseoconds
 canv.addEventListener("mousedown",function(evt) {
