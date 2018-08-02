@@ -85,24 +85,20 @@ class smokeParticle {
 // This should have the complex flow in the circle plan completed. Now just need to implement the mapping.
 // Now we're mapping to the airfoil, but something funny is happening. Seems like something about our coordinate map is wrong
 function getVelocityAtPoint(x,y,centerX,centerY) {
+	var mu = math.complex(centerX,centerY)
 	var radius = math.sqrt(math.pow(1-centerX,2.0)+math.pow(centerY,2.0));
 	var unmap = math.complex((x-canv.width/2.0)/100.0,(y-canv.height/2.0)/100.0); // This is the coordinate of the click in airfoil coordinates
 	// z = xi + 1/xi -> xi^2 - z*xi + 1 = 0, xi = (z+/-sqrt(z^2-4))/2
 	var xiplus = math.divide(math.add(unmap,math.sqrt(math.subtract(math.pow(unmap,2.0),4.0))),2.0);
 	var ximinus = math.divide(math.subtract(unmap,math.sqrt(math.subtract(math.pow(unmap,2.0),4.0))),2.0);
+	var xiplusr = math.subtract(mu,xiplus);
+	var ximinusr = math.subtract(mu,ximinus);
 	var xi; // Need to invert the jowkowski transform
-	if (xiplus.toPolar().r > ximinus.toPolar().r && xiplus.toPolar().r > radius) {
+	if (xiplusr.toPolar().r > radius) {
 		xi = xiplus;
-	} else if (xiplus.toPolar().r < ximinus.toPolar().r && ximinus.toPolar().r > radius) {
-		xi = ximinus;
 	} else {
-		xi = math.complex(10,10); // FIXME: Something is happening where both roots fall inside the unit circle
-															// This is most likely due to us badly detecting the actual bounds of the circle when considering that the circle is moved.
-															// I.E: There may be a solution whose radius is smaller, but since the circle is offset the smaller radius is still outside the circle in that direction
-															// While the larger root lies inside the unit circle.
-															// How should we detect this?
+		xi = ximinus;
 	}
-	var mu = math.complex(centerX,centerY)
 	var W = math.complex(0,0);
 	var freestream = math.complex(0,0);
 	freestream = Uinf*1.0;
