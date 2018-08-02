@@ -24,12 +24,17 @@ var particles = [];
 
 var mux = -0.1;
 var muy = 0.0;
+var mu = math.complex(mux,muy); // Circle center location
+var radius = 1.0;
 
 function inputControlChanged() {
 	Uinf = document.getElementById("Uinf").value;
 	mux = -1*document.getElementById("centerX").value;
 	muy = -1*document.getElementById("centerY").value;
+	radius = math.sqrt(math.pow(1.0-mux,2.0)+math.pow(muy,2.0)); // Circle radius, chosen to intersect +1 on the real axis
+	mu = math.complex(mux,muy); // Circle center location
 }
+inputControlChanged(); // Call this right away to set our parameters
 
 // This function resizes the canvas when the window resizes so that it always fills the window
 function windowResized() {
@@ -54,7 +59,6 @@ canv.addEventListener("mousemove", function(evt) {
 
 // This class represents a "smoke particle" that traces the flow
 // FIXME: May represent the smoke as a polygon eventually, which will let it deform with the flow
-// This may look more realistic
 class smokeParticle {
 	constructor(originX,originY,originT) {
 		this.x = originX;
@@ -80,59 +84,63 @@ class smokeParticle {
 		ctx.fillStyle = "hsl("+hval+",100%,50%)";
 		ctx.arc(this.x,this.y,5,0,2*Math.PI);
 		ctx.fill();
-		//ctx.stroke();
 	};
 };
 
-// The smoke does not exactly follow the streamlines due to the explicit nature of the time integration being used
-// I.E - The particles jump streamlines slightly due to the discrete, linear updates of particle position in each update
-// FIXME: Need to add conformal mapping routine to map circle to airfoil
-// This should have the complex flow in the circle plan completed. Now just need to implement the mapping.
-// Now we're mapping to the airfoil, but something funny is happening. Seems like something about our coordinate map is wrong
-function getVelocityAtPoint(x,y,centerX,centerY) {
-	var mu = math.complex(centerX,centerY)
-	var radius = math.sqrt(math.pow(1-centerX,2.0)+math.pow(centerY,2.0));
+// This is called by every particle at every time step to figure out its velocity.
+function getVelocityAtPoint(x,y) {
 	var unmap = math.complex((x-canv.width/2.0)/100.0,(y-canv.height/2.0)/100.0); // This is the coordinate of the click in airfoil coordinates
-	// z = xi + 1/xi -> xi^2 - z*xi + 1 = 0, xi = (z+/-sqrt(z^2-4))/2
+	// Solve the inverse joukowski transform. We get two roots. One root will lie inside the circle. The other will lie outside.
+	// The catch is that which root we should pick depends on where we are, so we need to calculate both.
 	var xiplus = math.divide(math.add(unmap,math.sqrt(math.subtract(math.pow(unmap,2.0),4.0))),2.0);
 	var ximinus = math.divide(math.subtract(unmap,math.sqrt(math.subtract(math.pow(unmap,2.0),4.0))),2.0);
+	// Now we want the root which has the largest radius. This is the root that lies outside of the circle in the circle plane.
+	// These next two lines are simply to calculate the distance of the root from the circle center
 	var xiplusr = math.subtract(mu,xiplus);
 	var ximinusr = math.subtract(mu,ximinus);
-	var xi; // Need to invert the jowkowski transform
+	var xi; // This will hold the value of the root we ultimately pick
 	if (xiplusr.toPolar().r > radius) {
 		xi = xiplus;
 	} else {
 		xi = ximinus;
 	}
-	var W = math.complex(0,0);
-	var freestream = math.complex(0,0);
+	// Now construct the flow solution in the circle plane
+	// Potential flow lets us sum together a bunch of linear solutions to get a more complex solution
+	// In this case, we need a uniform flow, a doublet, and a vortex.
+	var W = math.complex(0,0); // W is the total flow field.
+	var freestream = math.complex(0,0); // THe freestream flow
 	freestream = Uinf*1.0;
-	var vortex = math.complex(0,0);
-	var gamma = math.chain(math.multiply(4,math.pi)).multiply(Uinf).multiply(radius).done();
+	var vortex = math.complex(0,0); // The vortex flow.
+	var gamma = math.chain(math.multiply(4,math.pi)).multiply(Uinf).multiply(radius).done(); // Gamma is the value of the circulation we need to satisfy the kutta condition (Flow leaves tangent to the trailing edge)
 	gamma = math.multiply(gamma,math.sin(math.add(0.0,math.asin(math.divide(mu.im,radius)))));
-	vortex = math.chain(math.multiply(math.i,gamma)).divide(math.chain(math.multiply(2,math.pi)).multiply(math.subtract(xi,mu)).done()).done();
-	var doublet = math.complex(0,0);
+	vortex = math.chain(math.multiply(math.i,gamma)).divide(math.chain(math.multiply(2,math.pi)).multiply(math.subtract(xi,mu)).done()).done(); // Now calculate the vortex
+	var doublet = math.complex(0,0); // Calculate the doublet
 	doublet = math.divide(Uinf*math.pow(radius,2.0),math.pow(math.subtract(xi,mu),2.0));
+	// Now add them all together
 	W = math.add(W,freestream); // Freestream flow
 	W = math.add(W, vortex); // Vortex
 	W = math.subtract(W, doublet); // Doublet
-	W = math.divide(W,math.subtract(1.0,math.divide(1.0,math.pow(xi,2.0)))); // Convert to airfoil coordinates
-	var Vel = new Object();
+	W = math.divide(W,math.subtract(1.0,math.divide(1.0,math.pow(xi,2.0)))); // Convert the velocity to airfoil coordinates
+	var Vel = new Object(); // Now construct an object to return the flow velocity
 	Vel['U'] = W.re;
 	Vel['V'] = -W.im; // Velocity is given as W = u - i*v, so v is actually the negative of what we have here
 	return Vel;
 }
 
-function airfoilMap(centerX,centerY) {
+// This is to take a circle and run it through the joukowski transformation to get an airfoil.
+function airfoilMap() {
 	var i;
 	var mapped = [];
-	var radius = math.sqrt(math.pow(1-centerX,2.0)+math.pow(centerY,2.0));
-	for (i=0; i<360; i=i+2) {
+	for (i=0; i<360; i++) {
 		var rad = i*math.pi/180;
-		var xi = math.complex(radius*math.cos(rad)+centerX,radius*math.sin(rad)+centerY);
+		var xi = math.complex(radius*math.cos(rad)+mu.re,radius*math.sin(rad)+mu.im);
 		var psi = math.add(xi,math.divide(1.0,xi));
-		mapped[i] = 100.0*psi.re+canv.width/2;
-		mapped[i+1] = 100.0*psi.im+canv.height/2;
+		// Output the x and y points. Using z=x*i*y
+		// Need to scale our output for the screen
+		// TODO: Maybe eventually use a variable scale based on screen size
+		psi.re = 100.0*psi.re+canv.width/2;
+		psi.im = 100.0*psi.im+canv.height/2;
+		mapped[i] = psi;
 	}
 	return mapped;
 }
@@ -147,13 +155,12 @@ function drawTunnel() {
 	var airfoil = airfoilMap(mux,muy);
 	ctx.beginPath();
 	ctx.fillStyle = "#CCC";
-	ctx.moveTo(airfoil[0],airfoil[1]);
+	ctx.moveTo(airfoil[0].re,airfoil[0].im);
 	var j;
-	for (j=2; j<360; j=j+2) {
-		ctx.lineTo(airfoil[j],airfoil[j+1]);
+	for (j=1; j<360; j++) {
+		ctx.lineTo(airfoil[j].re,airfoil[j].im);
 	}
 	ctx.closePath();
-//	ctx.arc(canv.width/2.0,canv.height/2.0,a,0,2*Math.PI);
 	ctx.fill();
 
 	// Add a smoke particle if we should
