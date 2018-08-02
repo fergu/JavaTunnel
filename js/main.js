@@ -25,7 +25,7 @@ var minSmokeTime = 1; // Minimum time between creation of smoke particles in mil
 var particles = [];
 
 var mux = -0.1;
-var muy = -0.1;
+var muy = -0.4;
 
 // This function resizes the canvas when the window resizes so that it always fills the window
 function windowResized() {
@@ -91,10 +91,16 @@ function getVelocityAtPoint(x,y,centerX,centerY) {
 	var xiplus = math.divide(math.add(unmap,math.sqrt(math.subtract(math.pow(unmap,2.0),4.0))),2.0);
 	var ximinus = math.divide(math.subtract(unmap,math.sqrt(math.subtract(math.pow(unmap,2.0),4.0))),2.0);
 	var xi; // Need to invert the jowkowski transform
-	if (xiplus.toPolar().r > 1.0) {
+	if (xiplus.toPolar().r > ximinus.toPolar().r && xiplus.toPolar().r > radius) {
 		xi = xiplus;
-	} else {
+	} else if (xiplus.toPolar().r < ximinus.toPolar().r && ximinus.toPolar().r > radius) {
 		xi = ximinus;
+	} else {
+		xi = math.complex(10,10); // FIXME: Something is happening where both roots fall inside the unit circle
+															// This is most likely due to us badly detecting the actual bounds of the circle when considering that the circle is moved.
+															// I.E: There may be a solution whose radius is smaller, but since the circle is offset the smaller radius is still outside the circle in that direction
+															// While the larger root lies inside the unit circle.
+															// How should we detect this?
 	}
 	var mu = math.complex(centerX,centerY)
 	var W = math.complex(0,0);
@@ -124,7 +130,6 @@ function airfoilMap(centerX,centerY) {
 		var rad = i*math.pi/180;
 		var xi = math.complex(radius*math.cos(rad)+centerX,radius*math.sin(rad)+centerY);
 		var psi = math.add(xi,math.divide(1.0,xi));
-		//var psi = xi;
 		mapped[i] = 100.0*psi.re+canv.width/2;
 		mapped[i+1] = 100.0*psi.im+canv.height/2;
 	}
