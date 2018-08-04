@@ -39,7 +39,7 @@ inputControlChanged(); // Call this right away to set our parameters
 // This function resizes the canvas when the window resizes so that it always fills the window
 function windowResized() {
 	canv.width  = window.innerWidth;
-	canv.height = 0.9*window.innerHeight; // Leave 10% of the window height for the controls
+	canv.height = window.innerHeight; // Leave 10% of the window height for the controls
 };
 windowResized(); // Call the window resized routine once to set the size
 
