@@ -25,12 +25,20 @@ var mux = -0.1;
 var muy = 0.0;
 var mu = math.complex(mux,muy); // Circle center location
 var radius = 1.0;
+var alpha;
+// We will precalculate these when alpha changes to minimize the number of trig operations being done
+var sinalpha;
+var cosalpha;
+var tanalpha;
 
 function inputControlChanged() {
 	Uinf = document.getElementById("Uinf").value;
 	mux = -1*document.getElementById("centerX").value;
 	muy = -1*document.getElementById("centerY").value;
 	alpha = document.getElementById("alphaSlider").value;
+	sinalpha = math.sin(alpha);
+	cosalpha = math.cos(alpha);
+	tanalpha = math.tan(alpha);
 	radius = math.sqrt(math.pow(1.0-mux,2.0)+math.pow(muy,2.0)); // Circle radius, chosen to intersect +1 on the real axis
 	mu = math.complex(mux,muy); // Circle center location
 }
@@ -45,6 +53,7 @@ windowResized(); // Call the window resized routine once to set the size
 
 window.setInterval(drawTunnel,msPerFrame); // Causes the drawTunnel function to be called every msPerFrame miliseoconds
 canv.addEventListener("mousedown",function(evt) {
+	xi = math.complex((mouseX-canv.width/2.0)/100.0,(mouseY-canv.height/2.0)/100);
 	isMouseClicked = true;
 },false); // Calls mouseClicked() when the mouse button is clicked
 
@@ -93,12 +102,10 @@ function getVelocityAtPoint(x,y) {
 	y = y-canv.height/2.0;
 	// I think the bug is here. X and Y are airfoil coordinates, and we're solving a system of 2 equations for 2 unknown circle coordinates
 	// FIXME: Fix this
-	//var xcoord = 100.0*(psi.re*math.cos(alpha)-psi.im*math.sin(alpha))+canv.width/2.0;
-	//var ycoord = 100.0*(psi.re*math.sin(alpha)+psi.im*math.cos(alpha))+canv.height/2.0;
-	var unmapx = x/100.0+y*math.sin(alpha)/math.cos(alpha);
-	var unmapy = y/100.0-x*math.sin(alpha)/math.cos(alpha);
-	//var unmapx = x/100.0;
-	//var unmapy = y/100.0
+	var unmapy = (y+x*tanalpha)/(100*(tanalpha*sinalpha+cosalpha));
+	var unmapx = x/(100.0*cosalpha)-unmapy*tanalpha;
+	//var unmapx = x/100.0+y*math.sin(alpha)/math.cos(alpha);
+	//var unmapy = y/100.0-x*math.sin(alpha)/math.cos(alpha);
 	var unmap = math.complex(unmapx,unmapy); // This is the coordinate of the click in airfoil coordinates
 	// Solve the inverse joukowski transform. We get two roots. One root will lie inside the circle. The other will lie outside.
 	// The catch is that which root we should pick depends on where we are, so we need to calculate both.
@@ -122,7 +129,7 @@ function getVelocityAtPoint(x,y) {
 	freestream = math.multiply(Uinf,math.exp(math.chain(-1).multiply(math.i).multiply(alpha).done()));
 	var vortex = math.complex(0,0); // The vortex flow.
 	var gamma = math.chain(math.multiply(4,math.pi)).multiply(Uinf).multiply(radius).done(); // Gamma is the value of the circulation we need to satisfy the kutta condition (Flow leaves tangent to the trailing edge)
-	gamma = math.multiply(gamma,math.sin(math.add(0.0,math.asin(math.divide(mu.im,radius)))));
+	gamma = math.multiply(gamma,math.sin(math.add(alpha,math.asin(math.divide(mu.im,radius)))));
 	vortex = math.chain(math.multiply(math.i,gamma)).divide(math.chain(math.multiply(2,math.pi)).multiply(math.subtract(xi,mu)).done()).done(); // Now calculate the vortex
 	var doublet = math.complex(0,0); // Calculate the doublet
 	doublet = math.divide(math.chain(Uinf).multiply(math.pow(radius,2.0)).multiply(math.exp(math.chain(math.i).multiply(alpha).done())).done(),math.pow(math.subtract(xi,mu),2.0));
@@ -132,8 +139,8 @@ function getVelocityAtPoint(x,y) {
 	W = math.subtract(W, doublet); // Doublet
 	W = math.divide(W,math.subtract(1.0,math.divide(1.0,math.pow(xi,2.0)))); // Convert the velocity to airfoil coordinates
 	var Vel = new Object(); // Now construct an object to return the flow velocity
-	Vel['U'] = W.re*math.cos(alpha)+W.im*math.sin(alpha);
-	Vel['V'] = W.re*math.sin(alpha)-W.im*math.cos(alpha); // Velocity is given as W = u - i*v, so v is actually the negative of what we have here
+	Vel['U'] = W.re*cosalpha+W.im*sinalpha;
+	Vel['V'] = -W.re*sinalpha-W.im*cosalpha; // Velocity is given as W = u - i*v, so v is actually the negative of what we have here
 	//Vel['U'] = W.re;
 	//Vel['V'] = -W.im; // Velocity is given as W = u - i*v, so v is actually the negative of what we have here
 	return Vel;
@@ -145,17 +152,15 @@ function airfoilMap() {
 	var mapped = [];
 	for (i=0; i<360; i++) {
 		var rad = i*math.pi/180;
-		var xi = math.complex(radius*math.cos(rad)+mu.re,radius*math.sin(rad)+mu.im);
+		var xi = math.complex(radius*math.cos(rad)+mu.re,radius*math.sin(rad)-mu.im);
 		var psi = math.add(xi,math.divide(1.0,xi));
 		// Output the x and y points. Using z=x+i*y
 		// Need to scale our output for the screen
 		// TODO: Maybe eventually use a variable scale based on screen size
 		// Normally potential flow rotates the flow while keeping the airfoil horizontal.
 		// This isn't very intuitive to look at, so instead we'll rotate the airfoil and keep the flow horizontal
-		var xcoord = 100.0*(psi.re*math.cos(alpha)-psi.im*math.sin(alpha))+canv.width/2.0;
-		var ycoord = 100.0*(psi.re*math.sin(alpha)+psi.im*math.cos(alpha))+canv.height/2.0;
-		//var xcoord = 100.0*psi.re+canv.width/2.0;
-		//var ycoord = 100.0*psi.im+canv.height/2.0;
+		var xcoord = 100.0*(psi.re*cosalpha-psi.im*sinalpha)+canv.width/2.0;
+		var ycoord = 100.0*(-psi.re*sinalpha-psi.im*cosalpha)+canv.height/2.0;
 		mapped[i] = math.complex(xcoord,ycoord);
 	}
 	return mapped;
