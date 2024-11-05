@@ -1,3 +1,7 @@
+# This repository has been archived as of November, 2024
+
+Please consider using the updated version that is available online [here](https://fergu.github.io/WindTunnel/) and with code available [here](https://www.github.com/fergu/windtunnel) 
+
 # JavaTunnel
 A browser based solver for potential flow around airfoils.
 
